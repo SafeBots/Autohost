@@ -1,3 +1,5 @@
+<img src="https://safebots.ai/img/safebots/safebots.webp" style="width: 300px;">
+
 # Autohost
 
 **On-demand vhost provisioning for nginx and Apache. Customer points DNS at your server, hits the URL, gets a real cert + working vhost in seconds. Zero-downtime graceful reload, no manual cert management, pluggable cert providers (Let's Encrypt, Cloudflare Origin CA, CloudFront).**
