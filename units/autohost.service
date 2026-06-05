@@ -1,0 +1,43 @@
+[Unit]
+Description=autohost (on-demand nginx vhost + cert provisioning)
+Documentation=https://github.com/safebots/autohost
+After=network-online.target nginx.service
+Wants=network-online.target
+Requires=nginx.service
+
+[Service]
+Type=simple
+User=autohost
+Group=autohost
+ExecStart=/usr/bin/node /opt/autohost/src/autohost.js
+Restart=on-failure
+RestartSec=10s
+
+StateDirectory=autohost
+StateDirectoryMode=0750
+
+# Hardening
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+# Resource caps
+MemoryMax=256M
+TasksMax=64
+
+# Bind paths
+ReadOnlyPaths=/etc/autohost
+ReadWritePaths=/var/lib/autohost /etc/nginx/conf.d/auto /etc/nginx/conf.d/auto-certs /run/autohost
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

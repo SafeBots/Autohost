@@ -1,0 +1,38 @@
+{
+  "name": "autohost",
+  "version": "1.0.0",
+  "description": "On-demand nginx vhost + cert provisioning. Zero-downtime hot-add of new hostnames via Let's Encrypt, Cloudflare Origin CA, or CloudFront. MIT licensed.",
+  "main": "src/autohost.js",
+  "bin": {
+    "autohost": "src/autohost.js",
+    "autohost-renew": "src/renew.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/autohost.js",
+    "renew": "node src/renew.js",
+    "test": "bash test/run-tests.sh"
+  },
+  "dependencies": {
+    "acme-client": "5.4.0",
+    "node-forge": "1.3.1"
+  },
+  "keywords": [
+    "nginx",
+    "lets-encrypt",
+    "acme",
+    "cloudflare",
+    "cloudfront",
+    "tls",
+    "vhost",
+    "saas",
+    "multi-tenant"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/safebots/autohost"
+  }
+}

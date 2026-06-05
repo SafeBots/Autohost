@@ -1,0 +1,21 @@
+{
+  "_comment": "Example autohost config. Copy to /etc/autohost/config.json and edit.",
+
+  "provider": "letsencrypt",
+  "acmeContactEmail": "admin@example.com",
+  "acmeStaging": false,
+
+  "proxyTarget": "127.0.0.1:3000",
+
+  "perIpLimitPerHour": 10,
+  "globalLimitPerHour": 100,
+
+  "dnsResolvers": ["system", "1.1.1.1", "8.8.8.8"],
+
+  "dnsMismatchCacheMs": 300000,
+  "certFailCacheMs": 3600000,
+
+  "reloadDebounceMs": 2000,
+
+  "logLevel": "info"
+}

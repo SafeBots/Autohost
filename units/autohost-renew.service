@@ -1,0 +1,23 @@
+[Unit]
+Description=autohost cert renewal pass
+Documentation=https://github.com/safebots/autohost
+After=network-online.target nginx.service
+Requires=nginx.service
+
+[Service]
+Type=oneshot
+User=autohost
+Group=autohost
+ExecStart=/usr/bin/node /opt/autohost/src/renew.js
+
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/autohost
+ReadWritePaths=/var/lib/autohost /etc/nginx/conf.d/auto-certs
+
+# Renewal needs to call `nginx -s reload` after writing new certs.
+AmbientCapabilities=
+
+StandardOutput=journal
+StandardError=journal
