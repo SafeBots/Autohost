@@ -58,6 +58,38 @@ const DEFAULTS = {
     perIpLimitPerHour:  10,
     globalLimitPerHour: 100,
 
+    // ── Optional authorization hook ──────────────────────────────────────
+    // Path to a Node module that decides whether a given host is allowed to
+    // be provisioned, BEYOND the built-in DNS/CDN check. Null (default) means
+    // "no extra authorization" — behaviour is exactly as before: any host that
+    // passes the DNS-points-at-us check (or CDN mode) gets provisioned.
+    //
+    // When set, the module is require()'d once at startup and must export a
+    // function (or { authorize } object) with the signature:
+    //
+    //     async authorize(host, context) -> { allowed: boolean, reason?, code?, meta? }
+    //
+    //   host    : the requested hostname (already format-validated)
+    //   context : { requestIp, headers, provider, isCdnMode }
+    //
+    // The hook runs AFTER the DNS/CDN check and rate limit, but BEFORE any
+    // cert is provisioned — so it can gate expensive ACME work behind, e.g.,
+    // a single-use domain-bound token, an allowlist, a per-project quota, or a
+    // call into an external control plane. Returning { allowed: false } skips
+    // provisioning and returns the reason to the caller; the host is NOT
+    // negative-cached (it may become allowed shortly, e.g. quota frees up).
+    //
+    // This is the seam multi-tenant platforms (e.g. Safebox) use to enforce
+    // "which project may add this domain" without forking Autohost. If the hook
+    // module throws at load time, startup fails loudly rather than silently
+    // running unauthorized — a missing/broken authorizer must never fail open.
+    authorizeHook: null,
+
+    // If true and authorizeHook is set but fails to LOAD, refuse to start.
+    // (A hook that is configured but broken must not silently disappear,
+    // leaving provisioning wide open.) Default true.
+    authorizeHookRequired: true,
+
     // DNS resolvers — system + public resolvers in parallel, any match accepted
     dnsResolvers: ['system', '1.1.1.1', '8.8.8.8'],
 
@@ -294,6 +326,8 @@ function envOverrides() {
     if (e.AUTOVHOST_RELOAD_DEBOUNCE_MS)  out.reloadDebounceMs = parseInt(e.AUTOVHOST_RELOAD_DEBOUNCE_MS, 10);
     if (e.AUTOVHOST_PER_IP_LIMIT_PER_HOUR) out.perIpLimitPerHour = parseInt(e.AUTOVHOST_PER_IP_LIMIT_PER_HOUR, 10);
     if (e.AUTOVHOST_GLOBAL_LIMIT_PER_HOUR) out.globalLimitPerHour = parseInt(e.AUTOVHOST_GLOBAL_LIMIT_PER_HOUR, 10);
+    if (e.AUTOVHOST_AUTHORIZE_HOOK)        out.authorizeHook = e.AUTOVHOST_AUTHORIZE_HOOK;
+    if (e.AUTOVHOST_AUTHORIZE_HOOK_REQUIRED) out.authorizeHookRequired = e.AUTOVHOST_AUTHORIZE_HOOK_REQUIRED === 'true';
     return out;
 }
 

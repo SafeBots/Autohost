@@ -10,6 +10,9 @@
   "perIpLimitPerHour": 10,
   "globalLimitPerHour": 100,
 
+  "_authorizeHook_comment": "Optional: path to a Node module that gates provisioning (allowlist, single-use token, per-project quota). Omit for the default (any DNS-validated host provisions). See examples/authorize-hook.example.js.",
+  "authorizeHook": null,
+
   "dnsResolvers": ["system", "1.1.1.1", "8.8.8.8"],
 
   "dnsMismatchCacheMs": 300000,

@@ -4,7 +4,7 @@
 
 **On-demand vhost provisioning for nginx and Apache. Customer points DNS at your server, hits the URL, gets a real cert + working vhost in seconds. Zero-downtime graceful reload, no manual cert management, pluggable cert providers (Let's Encrypt, Cloudflare Origin CA, CloudFront).**
 
-[![Tests](https://img.shields.io/badge/tests-154%2F154-green.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-167%2F167-green.svg)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-blue.svg)](#requirements)
 
@@ -307,6 +307,35 @@ Two sliding-window rate limits (default 1-hour windows):
 
 Both protect upstream provider quotas. Let's Encrypt has a 50-cert-per-week per-registered-domain limit and a 5-failed-validation-per-hour per-account limit; the Autohost rate limiter should fire before LE's does.
 
+### Authorization hook (optional)
+
+By default Autohost provisions any host that passes the DNS-points-at-us check (or, in CDN mode, any host the CDN forwards). That's the right behavior for a single-tenant box or a trusted environment. For multi-tenant platforms — where you want to control *which* customer or project may attach *which* domain — Autohost exposes an optional authorization hook.
+
+Set `authorizeHook` to the path of a Node module:
+
+```json
+{ "authorizeHook": "/etc/autohost/authorize-hook.js" }
+```
+
+or via `AUTOVHOST_AUTHORIZE_HOOK=/etc/autohost/authorize-hook.js`. The module exports a function (or `{ authorize }`) with the signature:
+
+```js
+async authorize(host, context) -> { allowed: boolean, reason?, code?, meta? }
+//   host    : requested hostname (already format-validated)
+//   context : { requestIp, headers, provider, isCdnMode }
+```
+
+The hook runs **after** the DNS/CDN check proves the host points at this box and after the rate limit, but **before** any cert is provisioned — so it gates the expensive ACME work. Use it for an allowlist, a single-use domain-bound token, a per-project quota, or a call into your own control plane.
+
+Safety properties, which matter because this sits on the path to cert issuance:
+
+- Anything other than `{ allowed: true }` is a **deny**.
+- A hook that **throws fails closed** — a control-plane outage denies provisioning rather than opening it to everyone.
+- A configured-but-unloadable hook is a **hard startup failure** by default (`authorizeHookRequired: true`), so a broken authorizer can never silently disappear and leave provisioning wide open.
+- A denied host is **not** negative-cached — authorization can change (quota frees up, a token is minted) without the host being permanently "bad".
+
+A worked example, including a single-use, short-expiry, **domain-bound** token pattern (bind the token to the one host it authorizes so a leaked token can't be spent on a different domain, and send it as a header, never a query string, so it doesn't land in access logs), is in [`examples/authorize-hook.example.js`](examples/authorize-hook.example.js).
+
 ### Negative caching
 
 - **DNS mismatch**: 5 minutes by default. Short because the customer may be propagating DNS right now. Tune via `dnsMismatchCacheMs` in config.json.
@@ -499,7 +528,7 @@ Or directly:
 bash test/run-tests.sh
 ```
 
-Current count: **154 tests across 10 files.**
+Current count: **167 tests across 11 files.**
 
 - `testUnit.js` — pure function tests (hostname validation, vhost generation, rate limit math, both engines)
 - `testEngines.js` — nginx and Apache engine output, validateConfig/reload interfaces

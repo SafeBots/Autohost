@@ -63,6 +63,40 @@ log.info('startup', {
     version: require('../package.json').version,
 });
 
+// ── Optional authorization hook ────────────────────────────────────────────
+// Loaded once at startup. Gates provisioning beyond the built-in DNS/CDN check
+// (allowlist, single-use token, per-project quota, external control plane...).
+// Default: none, so behaviour is unchanged. A configured-but-broken hook is a
+// HARD startup failure when authorizeHookRequired (default true) — a missing
+// authorizer must never silently fail open and provision for everyone.
+let authorizeHook = null;
+function loadAuthorizeHook() {
+    if (!cfg.authorizeHook) return null;
+    let mod;
+    try {
+        mod = require(path.resolve(cfg.authorizeHook));
+    } catch (e) {
+        const msg = `failed to load authorizeHook '${cfg.authorizeHook}': ${e.message}`;
+        if (cfg.authorizeHookRequired) {
+            log.error('authorize_hook_load_failed_fatal', { hook: cfg.authorizeHook, message: e.message });
+            throw new Error(msg);
+        }
+        log.error('authorize_hook_load_failed_ignored', { hook: cfg.authorizeHook, message: e.message });
+        return null;
+    }
+    const fn = typeof mod === 'function' ? mod
+             : (mod && typeof mod.authorize === 'function' ? mod.authorize.bind(mod) : null);
+    if (!fn) {
+        const msg = `authorizeHook '${cfg.authorizeHook}' must export a function or { authorize }`;
+        if (cfg.authorizeHookRequired) throw new Error(msg);
+        log.error('authorize_hook_invalid_ignored', { hook: cfg.authorizeHook });
+        return null;
+    }
+    log.info('authorize_hook_loaded', { hook: cfg.authorizeHook });
+    return fn;
+}
+authorizeHook = loadAuthorizeHook();
+
 const isCdnMode = (cfg.provider === 'cloudflare' || cfg.provider === 'cloudfront');
 
 const inflight       = new Map();
@@ -158,7 +192,7 @@ async function installVhost(host, cert, key) {
     queueReload();
 }
 
-async function provision(host, requestIp) {
+async function provision(host, requestIp, reqContext) {
     if (!isValidHostname(host)) {
         return { status: 'error', code: 'INVALID_HOST', message: 'invalid hostname format' };
     }
@@ -199,6 +233,33 @@ async function provision(host, requestIp) {
                 }
             } else {
                 log.info('provision_skipping_dns_cdn_mode', { host, provider: cfg.provider });
+            }
+
+            // ── Authorization hook ─────────────────────────────────────────
+            // Runs after DNS/CDN proves the host points at us, before we spend
+            // an (expensive, rate-limited) cert provision. A false result is
+            // NOT negative-cached: authorization may change (quota frees, a
+            // token is minted) without the host itself being "bad".
+            if (authorizeHook) {
+                let decision;
+                try {
+                    decision = await authorizeHook(host, {
+                        requestIp,
+                        headers: (reqContext && reqContext.headers) || {},
+                        provider: cfg.provider,
+                        isCdnMode,
+                    });
+                } catch (e) {
+                    // A throwing authorizer must fail CLOSED, not open.
+                    log.error('authorize_hook_threw', { host, message: e.message });
+                    return { status: 'error', code: 'UNAUTHORIZED', message: 'authorization error' };
+                }
+                if (!decision || decision.allowed !== true) {
+                    const code = (decision && decision.code) || 'UNAUTHORIZED';
+                    const reason = (decision && decision.reason) || 'not authorized';
+                    log.info('provision_unauthorized', { host, code, reason });
+                    return { status: 'error', code, message: reason };
+                }
             }
 
             log.info('provision_starting', { host, provider: cfg.provider });
@@ -246,7 +307,9 @@ function startServer() {
                 return;
             }
             try {
-                const result = await module.exports.provision(parsed.host, parsed.requestIp);
+                const result = await module.exports.provision(parsed.host, parsed.requestIp, {
+                    headers: parsed.headers || {},
+                });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(result));
             } catch (e) {
